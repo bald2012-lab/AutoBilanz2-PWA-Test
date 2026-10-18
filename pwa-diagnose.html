@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#173f4c"><title>AutoBilanz · PWA Diagnose</title>
+<link rel="manifest" href="./manifest.webmanifest?v=installtest-2">
+<link rel="icon" href="./icon-192.png" type="image/png">
+<style>
+:root{font:16px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#183644;background:#f0f4f6}body{margin:0;max-width:690px;margin-inline:auto;padding:20px}h1{font-size:1.45rem;margin:0 0 6px}p{line-height:1.45}#log{padding:0;list-style:none}li{margin:7px 0;background:white;padding:11px 13px;border-radius:9px;border-left:5px solid #a2aeb4;overflow-wrap:anywhere}li.ok{border-color:#278354}li.fail{border-color:#a53e43}button,a.button{font:inherit;background:#164b61;color:white;text-decoration:none;padding:13px 16px;border:none;border-radius:10px;display:inline-block;margin:4px 6px 4px 0}button:disabled{opacity:.45}small{color:#4f6976}code{font-size:.85rem;overflow-wrap:anywhere}img{vertical-align:middle}h2{font-size:1.05rem;margin-top:25px}
+</style></head><body>
+<h1>AutoBilanz · PWA Diagnose</h1>
+<p>Diese Seite prüft öffentlich erreichbare Installationsdateien, Icons und Service Worker. Die App selbst bleibt unverändert.</p>
+<div><button id="test" type="button">Erneut prüfen</button><button id="install" type="button" disabled>App installieren</button><a class="button" href="./">AutoBilanz öffnen</a></div>
+<ul id="log" aria-live="polite"></ul>
+<p><small>Ein fehlendes Installationsangebot ist nicht automatisch ein technischer Fehler. Die endgültige Entscheidung liegt bei Chrome/Android.</small></p>
+<script>
+(function(){
+const ul=document.getElementById('log');
+const install=document.getElementById('install');
+let deferred=null;
+function line(ok,heading,detail){let li=document.createElement('li');li.className=ok===true?'ok':ok===false?'fail':''; let b=document.createElement('strong');b.textContent=heading;li.append(b);let t=document.createElement('div');t.textContent=detail||'';li.append(t);ul.append(li)}
+function checkImage(src,w,h){return new Promise(resolve=>{const img=new Image();img.onload=()=>resolve({ok:img.naturalWidth===w&&img.naturalHeight===h,size:img.naturalWidth+'×'+img.naturalHeight});img.onerror=()=>resolve({ok:false,size:'nicht geladen'});img.src=src+'?check=2';});}
+async function test(){ul.replaceChildren();line(null,'Standort',location.href);
+line(location.protocol==='https:','HTTPS',location.protocol);
+try{
+ const link=document.querySelector('link[rel=manifest]');let r=await fetch(link.href,{cache:'no-store'});let m=await r.json();
+ const base=new URL('./',location.href);const start=new URL(m.start_url,base);const scope=new URL(m.scope,base);
+ line(r.ok&&m.display==='standalone'&&!!m.short_name&&start.href.startsWith(scope.href),'Manifest',`HTTP ${r.status}; Display ${m.display}; Start ${start.pathname}; Scope ${scope.pathname}`);
+ for(const [filename,w] of [['icon-192.png',192],['icon-512.png',512],['icon-maskable-512.png',512]]){const img=await checkImage(filename,w,w);line(img.ok,filename,img.size)}
+}catch(e){line(false,'Manifest / Icons',String(e))}
+if('serviceWorker' in navigator){try{
+ let reg=await navigator.serviceWorker.register('./service-worker.js?v=installtest-2',{scope:'./',updateViaCache:'none'});
+ await navigator.serviceWorker.ready;
+ line(!!reg.active,'Service Worker',reg.active?.state||'nicht aktiv');
+ line(!!navigator.serviceWorker.controller,'Seitenkontrolle',navigator.serviceWorker.controller?'Diese Seite wird vom Service Worker gesteuert.':'Falls neu registriert: Seite erneut laden.');
+}catch(e){line(false,'Service Worker',String(e))}}
+else line(false,'Service Worker','In diesem Browser nicht verfügbar');
+line(null,'Chrome-Installation',deferred?'Installationsangebot erkannt':'Noch kein beforeinstallprompt-Signal. Nur der Browser kann das definitive Ergebnis liefern.');
+}
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e;install.disabled=false;line(true,'Installationsangebot','Chrome hat beforeinstallprompt ausgelöst. Die Schaltfläche „App installieren“ ist jetzt aktiv.');});
+window.addEventListener('appinstalled',()=>{line(true,'Installation','Chrome meldet: appinstalled.');install.disabled=true;deferred=null;});
+install.addEventListener('click',async()=>{if(!deferred)return;const e=deferred;deferred=null;install.disabled=true;try{await e.prompt();let choice=await e.userChoice;line(choice.outcome==='accepted','Installation',choice.outcome)}catch(err){line(false,'Installation',String(err))}});
+document.getElementById('test').addEventListener('click',test);test();
+})();
+</script></body></html>
